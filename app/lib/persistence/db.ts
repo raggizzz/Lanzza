@@ -13,13 +13,21 @@ const logger = createScopedLogger('ChatHistory');
 
 // this is used at the top level and never rejects
 export async function openDatabase(): Promise<IDBDatabase | undefined> {
-  if (typeof indexedDB === 'undefined') {
-    console.error('indexedDB is not available in this environment.');
+  // Check if we're in a browser environment
+  if (typeof window === 'undefined') {
+    console.log('Not in browser environment, IndexedDB not available');
+    return undefined;
+  }
+  
+  // Check for IndexedDB support
+  if (typeof indexedDB === 'undefined' || !indexedDB) {
+    console.error('IndexedDB is not available in this environment.');
     return undefined;
   }
 
-  return new Promise((resolve) => {
-    const request = indexedDB.open('boltHistory', 2);
+  try {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('boltHistory', 2);
 
     request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
       const db = (event.target as IDBOpenDBRequest).result;
@@ -40,15 +48,28 @@ export async function openDatabase(): Promise<IDBDatabase | undefined> {
       }
     };
 
-    request.onsuccess = (event: Event) => {
-      resolve((event.target as IDBOpenDBRequest).result);
-    };
+      request.onsuccess = (event: Event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        console.log('IndexedDB opened successfully');
+        resolve(db);
+      };
 
-    request.onerror = (event: Event) => {
-      resolve(undefined);
-      logger.error((event.target as IDBOpenDBRequest).error);
-    };
-  });
+      request.onerror = (event: Event) => {
+        const error = (event.target as IDBOpenDBRequest).error;
+        console.error('Failed to open IndexedDB:', error);
+        logger.error(error);
+        resolve(undefined);
+      };
+
+      request.onblocked = (event: Event) => {
+        console.warn('IndexedDB open request was blocked');
+        resolve(undefined);
+      };
+    });
+  } catch (error) {
+    console.error('Error initializing IndexedDB:', error);
+    return undefined;
+  }
 }
 
 export async function getAll(db: IDBDatabase): Promise<ChatHistoryItem[]> {

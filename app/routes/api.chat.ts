@@ -13,6 +13,8 @@ import { createSummary } from '~/lib/.server/llm/create-summary';
 import { extractPropertiesFromMessage } from '~/lib/.server/llm/utils';
 import type { DesignScheme } from '~/types/design-scheme';
 import { MCPService } from '~/lib/services/mcpService';
+import { DatabaseService } from '~/lib/services/database';
+import { supabaseHelpers } from '~/lib/supabase/client';
 
 export async function action(args: ActionFunctionArgs) {
   return chatAction(args);
@@ -39,7 +41,7 @@ function parseCookies(cookieHeader: string): Record<string, string> {
 }
 
 async function chatAction({ context, request }: ActionFunctionArgs) {
-  const { messages, files, promptId, contextOptimization, supabase, chatMode, designScheme, maxLLMSteps } =
+  const { messages, files, promptId, contextOptimization, supabase, chatMode, designScheme, maxLLMSteps, sessionId, projectId } =
     await request.json<{
       messages: Messages;
       files: any;
@@ -56,7 +58,26 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         };
       };
       maxLLMSteps: number;
+      sessionId?: string;
+      projectId?: string;
     }>();
+
+  // Obter usuário autenticado
+  const { data: { user } } = await supabaseHelpers.auth.getUser();
+  let currentSessionId = sessionId;
+  
+  // Se há usuário logado e não há sessionId, criar nova sessão
+  if (user && !currentSessionId) {
+    const newSession = await DatabaseService.createChatSession(user.id, {
+      title: `Chat ${new Date().toLocaleString()}`,
+      type: chatMode === 'build' ? 'mvp' : 'general',
+      project_id: projectId
+    });
+    
+    if (newSession) {
+      currentSessionId = newSession.id;
+    }
+  }
 
   const cookieHeader = request.headers.get('Cookie');
   const apiKeys = JSON.parse(parseCookies(cookieHeader || '').apiKeys || '{}');
@@ -89,6 +110,29 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let messageSliceId = 0;
 
         const processedMessages = await mcpService.processToolInvocations(messages, dataStream);
+
+        // Salvar mensagens no banco de dados se usuário estiver logado
+        if (user && currentSessionId) {
+          try {
+            // Salvar apenas a última mensagem do usuário (nova mensagem)
+            const lastUserMessage = processedMessages.filter(msg => msg.role === 'user').slice(-1)[0];
+            if (lastUserMessage) {
+              await DatabaseService.createChatMessage({
+                session_id: currentSessionId,
+                role: 'user',
+                content: lastUserMessage.content,
+                metadata: {
+                  timestamp: new Date().toISOString(),
+                  files: files || {},
+                  promptId,
+                  chatMode
+                }
+              });
+            }
+          } catch (error) {
+            logger.error('Erro ao salvar mensagem do usuário:', error);
+          }
+        }
 
         if (processedMessages.length > 3) {
           messageSliceId = processedMessages.length - 3;
@@ -214,6 +258,25 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               cumulativeUsage.completionTokens += usage.completionTokens || 0;
               cumulativeUsage.promptTokens += usage.promptTokens || 0;
               cumulativeUsage.totalTokens += usage.totalTokens || 0;
+            }
+
+            // Salvar resposta do assistente no banco de dados
+            if (user && currentSessionId && content) {
+              try {
+                await DatabaseService.createChatMessage({
+                  session_id: currentSessionId,
+                  role: 'assistant',
+                  content: content,
+                  metadata: {
+                    timestamp: new Date().toISOString(),
+                    usage: usage || {},
+                    finishReason,
+                    chatMode
+                  }
+                });
+              } catch (error) {
+                logger.error('Erro ao salvar resposta do assistente:', error);
+              }
             }
 
             if (finishReason !== 'length') {

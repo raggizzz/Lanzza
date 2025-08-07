@@ -36,11 +36,24 @@ const toastAnimation = cssTransition({
 
 const logger = createScopedLogger('Chat');
 
-export function Chat() {
+interface ChatComponentProps {
+  projectId?: string;
+  chatMode?: string;
+  initialContext?: {
+    projectId: string;
+    chatMode: string;
+  };
+}
+
+export function Chat({ projectId, chatMode, initialContext }: ChatComponentProps = {}) {
   renderLogger.trace('Chat');
 
   const { ready, initialMessages, storeMessageHistory, importChat, exportChat } = useChatHistory();
   const title = useStore(description);
+  
+  useEffect(() => {
+    console.log(`Chat component ready state changed: ${ready}`);
+  }, [ready]);
   useEffect(() => {
     workbenchStore.setReloadedMessages(initialMessages.map((m) => m.id));
   }, [initialMessages]);
@@ -54,6 +67,9 @@ export function Chat() {
           exportChat={exportChat}
           storeMessageHistory={storeMessageHistory}
           importChat={importChat}
+          projectId={projectId}
+          chatMode={chatMode}
+          initialContext={initialContext}
         />
       )}
       <ToastContainer
@@ -112,10 +128,16 @@ interface ChatProps {
   importChat: (description: string, messages: Message[]) => Promise<void>;
   exportChat: () => void;
   description?: string;
+  projectId?: string;
+  chatMode?: string;
+  initialContext?: {
+    projectId: string;
+    chatMode: string;
+  };
 }
 
 export const ChatImpl = memo(
-  ({ description, initialMessages, storeMessageHistory, importChat, exportChat }: ChatProps) => {
+  ({ description, initialMessages, storeMessageHistory, importChat, exportChat, projectId, chatMode, initialContext }: ChatProps) => {
     useShortcuts();
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -146,7 +168,7 @@ export const ChatImpl = memo(
     const { showChat } = useStore(chatStore);
     const [animationScope, animate] = useAnimate();
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
-    const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
+    const [localChatMode, setLocalChatMode] = useState<'discuss' | 'build'>(chatMode as 'discuss' | 'build' || 'build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
     const mcpSettings = useMCPStore((state) => state.settings);
 
@@ -689,8 +711,8 @@ export const ChatImpl = memo(
         llmErrorAlert={llmErrorAlert}
         clearLlmErrorAlert={clearApiErrorAlert}
         data={chatData}
-        chatMode={chatMode}
-        setChatMode={setChatMode}
+        chatMode={localChatMode}
+        setChatMode={setLocalChatMode}
         append={append}
         designScheme={designScheme}
         setDesignScheme={setDesignScheme}

@@ -2,7 +2,7 @@ import { atom, map, type MapStore, type ReadableAtom, type WritableAtom } from '
 import type { EditorDocument, ScrollPosition } from '~/components/editor/codemirror/CodeMirrorEditor';
 import { ActionRunner } from '~/lib/runtime/action-runner';
 import type { ActionCallbackData, ArtifactCallbackData } from '~/lib/runtime/message-parser';
-import { webcontainer } from '~/lib/webcontainer';
+import { webcontainer, initializeWebContainer } from '~/lib/webcontainer';
 import type { ITerminal } from '~/types/terminal';
 import { unreachable } from '~/utils/unreachable';
 import { EditorStore } from './editor';
@@ -14,7 +14,7 @@ import fileSaver from 'file-saver';
 import { Octokit, type RestEndpointMethodTypes } from '@octokit/rest';
 import { path } from '~/utils/path';
 import { extractRelativePath } from '~/utils/diff';
-import { description } from '~/lib/persistence';
+// Removed circular dependency import
 import Cookies from 'js-cookie';
 import { createSampler } from '~/utils/sampler';
 import type { ActionAlert, DeployAlert, SupabaseAlert } from '~/types/actions';
@@ -36,10 +36,10 @@ type Artifacts = MapStore<Record<string, ArtifactState>>;
 export type WorkbenchViewType = 'code' | 'diff' | 'preview';
 
 export class WorkbenchStore {
-  #previewsStore = new PreviewsStore(webcontainer);
-  #filesStore = new FilesStore(webcontainer);
+  #previewsStore = new PreviewsStore(Promise.resolve().then(() => initializeWebContainer()));
+  #filesStore = new FilesStore(Promise.resolve().then(() => initializeWebContainer()));
   #editorStore = new EditorStore(this.#filesStore);
-  #terminalStore = new TerminalStore(webcontainer);
+  #terminalStore = new TerminalStore(Promise.resolve().then(() => initializeWebContainer()));
 
   #reloadedMessages = new Set<string>();
 
@@ -558,7 +558,7 @@ export class WorkbenchStore {
     }
 
     if (data.action.type === 'file') {
-      const wc = await webcontainer;
+      const wc = await initializeWebContainer();
       const fullPath = path.join(wc.workdir, data.action.filePath);
 
       /*
@@ -609,8 +609,10 @@ export class WorkbenchStore {
     const zip = new JSZip();
     const files = this.files.get();
 
-    // Get the project name from the description input, or use a default name
-    const projectName = (description.value ?? 'project').toLocaleLowerCase().split(' ').join('_');
+    // Get the project name from the URL or use a default name
+    const urlPath = window.location.pathname;
+    const chatId = urlPath.includes('/chat/') ? urlPath.split('/chat/')[1] : 'project';
+    const projectName = (chatId || 'project').toLocaleLowerCase().split(' ').join('_').replace(/[^a-z0-9_]/g, '_');
 
     // Generate a simple 6-character hash based on the current timestamp
     const timestampHash = Date.now().toString(36).slice(-6);

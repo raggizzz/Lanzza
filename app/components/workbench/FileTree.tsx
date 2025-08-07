@@ -356,9 +356,9 @@ function FileContextMenu({
     const success = await workbenchStore.createFile(newFilePath, '');
 
     if (success) {
-      toast.success('File created successfully');
+      toast.success('Arquivo criado com sucesso');
     } else {
-      toast.error('Failed to create file');
+      toast.error('Falha ao criar arquivo');
     }
 
     setIsCreatingFile(false);
@@ -369,9 +369,9 @@ function FileContextMenu({
     const success = await workbenchStore.createFolder(newFolderPath);
 
     if (success) {
-      toast.success('Folder created successfully');
+      toast.success('Pasta criada com sucesso');
     } else {
-      toast.error('Failed to create folder');
+      toast.error('Falha ao criar pasta');
     }
 
     setIsCreatingFolder(false);
@@ -379,7 +379,7 @@ function FileContextMenu({
 
   const handleDelete = async () => {
     try {
-      if (!confirm(`Are you sure you want to delete ${isFolder ? 'folder' : 'file'}: ${fileName}?`)) {
+      if (!confirm(`Tem certeza que deseja excluir ${isFolder ? 'pasta' : 'arquivo'}: ${fileName}?`)) {
         return;
       }
 
@@ -392,9 +392,9 @@ function FileContextMenu({
       }
 
       if (success) {
-        toast.success(`${isFolder ? 'Folder' : 'File'} deleted successfully`);
+        toast.success(`${isFolder ? 'Pasta' : 'Arquivo'} excluído com sucesso`);
       } else {
-        toast.error(`Failed to delete ${isFolder ? 'folder' : 'file'}`);
+        toast.error(`Falha ao excluir ${isFolder ? 'pasta' : 'arquivo'}`);
       }
     } catch (error) {
       toast.error(`Error deleting ${isFolder ? 'folder' : 'file'}`);
@@ -507,13 +507,13 @@ function FileContextMenu({
               <ContextMenuItem onSelect={() => setIsCreatingFile(true)}>
                 <div className="flex items-center gap-2">
                   <div className="i-ph:file-plus" />
-                  New File
+                  Novo Arquivo
                 </div>
               </ContextMenuItem>
               <ContextMenuItem onSelect={() => setIsCreatingFolder(true)}>
                 <div className="flex items-center gap-2">
                   <div className="i-ph:folder-plus" />
-                  New Folder
+                  Nova Pasta
                 </div>
               </ContextMenuItem>
             </ContextMenu.Group>
@@ -560,7 +560,7 @@ function FileContextMenu({
               <ContextMenuItem onSelect={handleDelete}>
                 <div className="flex items-center gap-2 text-red-500">
                   <div className="i-ph:trash" />
-                  Delete {isFolder ? 'Folder' : 'File'}
+                  Excluir {isFolder ? 'Pasta' : 'Arquivo'}
                 </div>
               </ContextMenuItem>
             </ContextMenu.Group>
@@ -570,7 +570,7 @@ function FileContextMenu({
       {isCreatingFile && (
         <InlineInput
           depth={depth}
-          placeholder="Enter file name..."
+          placeholder="Digite o nome do arquivo..."
           onSubmit={handleCreateFile}
           onCancel={() => setIsCreatingFile(false)}
         />
@@ -578,7 +578,7 @@ function FileContextMenu({
       {isCreatingFolder && (
         <InlineInput
           depth={depth}
-          placeholder="Enter folder name..."
+          placeholder="Digite o nome da pasta..."
           onSubmit={handleCreateFolder}
           onCancel={() => setIsCreatingFolder(false)}
         />

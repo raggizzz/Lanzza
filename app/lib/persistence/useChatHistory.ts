@@ -19,7 +19,7 @@ import {
 } from './db';
 import type { FileMap } from '~/lib/stores/files';
 import type { Snapshot } from './types';
-import { webcontainer } from '~/lib/webcontainer';
+import { initializeWebContainer } from '~/lib/webcontainer';
 import { detectProjectCommands, createCommandActionsString } from '~/utils/projectCommands';
 import type { ContextAnnotation } from '~/types/context';
 
@@ -48,27 +48,82 @@ export function useChatHistory() {
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
   const [ready, setReady] = useState<boolean>(false);
   const [urlId, setUrlId] = useState<string | undefined>();
+  const [retryCount, setRetryCount] = useState<number>(0);
 
   useEffect(() => {
     if (!db) {
+      console.log('Database not available, checking localStorage fallback');
+      
+      // Try localStorage fallback for development
+      if (mixedId && typeof localStorage !== 'undefined') {
+        try {
+          const storedChat = localStorage.getItem(`chat:${mixedId}`);
+          if (storedChat) {
+            const chatData = JSON.parse(storedChat);
+            console.log(`Found chat in localStorage: ${chatData.messages?.length || 0} messages`);
+            setInitialMessages(chatData.messages || []);
+            setUrlId(chatData.urlId);
+            description.set(chatData.description);
+            chatId.set(chatData.id || mixedId);
+            chatMetadata.set(chatData.metadata);
+            setReady(true);
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to load from localStorage:', error);
+        }
+      }
+      
       setReady(true);
 
       if (persistenceEnabled) {
-        const error = new Error('Chat persistence is unavailable');
+        const error = new Error('Chat persistence is unavailable - IndexedDB not supported');
         logStore.logError('Chat persistence initialization failed', error);
-        toast.error('Chat persistence is unavailable');
+        console.warn('Chat persistence is unavailable - using localStorage fallback');
       }
 
       return;
     }
 
     if (mixedId) {
-      Promise.all([
-        getMessages(db, mixedId),
-        getSnapshot(db, mixedId), // Fetch snapshot from DB
-      ])
-        .then(async ([storedMessages, snapshot]) => {
-          if (storedMessages && storedMessages.messages.length > 0) {
+      // Add a small delay for imported projects to ensure they're fully created
+      const isImportedProject = mixedId?.startsWith('imported-files');
+      const loadDelay = isImportedProject && retryCount === 0 ? 2000 : 0;
+      console.log(`Processing mixedId: ${mixedId}, isImportedProject: ${isImportedProject}, loadDelay: ${loadDelay}, retryCount: ${retryCount}`);
+      
+      setTimeout(() => {
+        console.log(`Loading chat with mixedId: ${mixedId}, attempt: ${retryCount + 1}`);
+        console.log(`Is imported project: ${isImportedProject}, delay: ${loadDelay}ms`);
+        Promise.all([
+          getMessages(db, mixedId),
+          getSnapshot(db, mixedId), // Fetch snapshot from DB
+        ])
+          .then(async ([storedMessages, snapshot]) => {
+            console.log(`Retrieved storedMessages:`, storedMessages ? `${storedMessages.messages?.length || 0} messages` : 'null');
+            
+            // If IndexedDB failed, try localStorage fallback
+            if (!storedMessages && !db) {
+              try {
+                const localData = localStorage.getItem(`chat_${mixedId}`);
+                if (localData) {
+                  const parsedData = JSON.parse(localData);
+                  console.log(`Retrieved ${parsedData.messages?.length || 0} messages from localStorage fallback`);
+                  if (parsedData.messages && parsedData.messages.length > 0) {
+                    setInitialMessages(parsedData.messages);
+                    setUrlId(parsedData.urlId || mixedId);
+                    description.set(parsedData.description);
+                    chatId.set(parsedData.id);
+                    chatMetadata.set(parsedData.metadata);
+                    console.log(`Setting ready=true for localStorage fallback, mixedId: ${mixedId}`);
+                     setReady(true);
+                    return;
+                  }
+                }
+              } catch (localError) {
+                console.error('localStorage fallback failed:', localError);
+              }
+            }
+            if (storedMessages && storedMessages.messages.length > 0) {
             /*
              * const snapshotStr = localStorage.getItem(`snapshot:${mixedId}`); // Remove localStorage usage
              * const snapshot: Snapshot = snapshotStr ? JSON.parse(snapshotStr) : { chatIndex: 0, files: {} }; // Use snapshot from DB
@@ -179,23 +234,75 @@ ${value.content}
             description.set(storedMessages.description);
             chatId.set(storedMessages.id);
             chatMetadata.set(storedMessages.metadata);
+            console.log(`Chat loaded successfully, ${filteredMessages.length} messages, mixedId: ${mixedId}`);
           } else {
-            navigate('/', { replace: true });
+            console.log(`Chat not found for mixedId: ${mixedId}, retry count: ${retryCount}`);
+            
+            // For imported projects, try a longer delay and more retries
+            const isImportedProject = mixedId?.startsWith('imported-files');
+            const maxRetries = isImportedProject ? 15 : 5;
+            const baseDelay = isImportedProject ? 2000 : 1000;
+            
+            // Retry loading the chat a few times before redirecting
+            if (retryCount < maxRetries) {
+              console.log(`Retrying to load chat ${mixedId} (attempt ${retryCount + 1}/${maxRetries})`);
+              setTimeout(() => {
+                setRetryCount(prev => prev + 1);
+              }, baseDelay + (retryCount * 500)); // Linear backoff with base delay
+              return;
+            } else {
+              console.log(`Failed to load chat ${mixedId} after ${maxRetries} attempts`);
+              // Instead of redirecting immediately, try to check if the chat exists in the database
+              if (db) {
+                try {
+                  const chatExists = await getMessages(db, mixedId);
+                  if (chatExists && chatExists.messages && chatExists.messages.length > 0) {
+                    console.log(`Chat found on final check, loading...`);
+                    setInitialMessages(chatExists.messages);
+                    setUrlId(chatExists.urlId);
+                    description.set(chatExists.description);
+                    chatId.set(chatExists.id);
+                    chatMetadata.set(chatExists.metadata);
+                    console.log(`Setting ready=true after final database check, mixedId: ${mixedId}`);
+                    setReady(true);
+                    return;
+                  }
+                } catch (error) {
+                  console.error('Final chat check failed:', error);
+                }
+              }
+              console.log(`Chat ${mixedId} not found after all attempts, staying on current page`);
+              // Don't redirect to home, let the user stay on the chat page
+              // This prevents imported projects from being redirected away
+              console.log(`Setting ready=true for chat not found scenario, mixedId: ${mixedId}`);
+              setReady(true);
+              return;
+            }
           }
 
+          console.log(`Setting ready=true after successful chat load, mixedId: ${mixedId}`);
           setReady(true);
         })
         .catch((error) => {
           console.error(error);
+          console.log(`Setting ready=true after error, mixedId: ${mixedId}`);
+          setReady(true);
 
           logStore.logError('Failed to load chat messages or snapshot', error); // Updated error message
           toast.error('Failed to load chat: ' + error.message); // More specific error
         });
-    } else {
-      // Handle case where there is no mixedId (e.g., new chat)
-      setReady(true);
-    }
-  }, [mixedId, db, navigate, searchParams]); // Added db, navigate, searchParams dependencies
+      }, loadDelay);
+      } else {
+        // Handle case where there is no mixedId (e.g., new chat)
+        console.log(`Setting ready=true for no mixedId scenario`);
+        setReady(true);
+      }
+  }, [mixedId, db, navigate, searchParams, retryCount]); // Added retryCount dependency
+
+  // Reset retry count when mixedId changes
+  useEffect(() => {
+    setRetryCount(0);
+  }, [mixedId]);
 
   const takeSnapshot = useCallback(
     async (chatIdx: string, files: FileMap, _chatId?: string | undefined, chatSummary?: string) => {
@@ -224,7 +331,7 @@ ${value.content}
 
   const restoreSnapshot = useCallback(async (id: string, snapshot?: Snapshot) => {
     // const snapshotStr = localStorage.getItem(`snapshot:${id}`); // Remove localStorage usage
-    const container = await webcontainer;
+    const container = await initializeWebContainer();
 
     const validSnapshot = snapshot || { chatIndex: '', files: {} };
 
@@ -274,7 +381,26 @@ ${value.content}
       }
     },
     storeMessageHistory: async (messages: Message[]) => {
-      if (!db || messages.length === 0) {
+      if (messages.length === 0) {
+        return;
+      }
+      
+      // If no database, try localStorage fallback
+      if (!db) {
+        try {
+          const chatData = {
+            id: chatId.get() || mixedId,
+            urlId: urlId,
+            description: description.get(),
+            messages: messages.filter((m) => !m.annotations?.includes('no-store')),
+            timestamp: new Date().toISOString(),
+            metadata: chatMetadata.get()
+          };
+          localStorage.setItem(`chat:${chatData.id}`, JSON.stringify(chatData));
+          console.log(`Saved chat to localStorage: ${chatData.id}`);
+        } catch (error) {
+          console.error('Failed to save to localStorage:', error);
+        }
         return;
       }
 
@@ -363,7 +489,7 @@ ${value.content}
 
       try {
         const newId = await createChatFromMessages(db, description, messages, metadata);
-        window.location.href = `/chat/${newId}`;
+        navigate(`/chat/${newId}`, { replace: true });
         toast.success('Chat imported successfully');
       } catch (error) {
         if (error instanceof Error) {

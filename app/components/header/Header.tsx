@@ -1,5 +1,6 @@
 import { useStore } from '@nanostores/react';
 import { ClientOnly } from 'remix-utils/client-only';
+import { Link } from '@remix-run/react';
 import { chatStore } from '~/lib/stores/chat';
 import { classNames } from '~/utils/classNames';
 import { HeaderActionButtons } from './HeaderActionButtons.client';
@@ -18,19 +19,23 @@ export function Header() {
       <div className="flex items-center gap-2 z-logo text-bolt-elements-textPrimary cursor-pointer">
         <div className="i-ph:sidebar-simple-duotone text-xl" />
         <a href="/" className="text-2xl font-semibold text-accent flex items-center">
-          {/* <span className="i-bolt:logo-text?mask w-[46px] inline-block" /> */}
-          <img src="/logo-light-styled.png" alt="logo" className="w-[90px] inline-block dark:hidden" />
-          <img src="/logo-dark-styled.png" alt="logo" className="w-[90px] inline-block hidden dark:block" />
+          <img src="/logo-dark.png" alt="Lanzza" className="w-[90px] inline-block" />
         </a>
       </div>
-      {chat.started && ( // Display ChatDescription and HeaderActionButtons only when the chat has started.
+      {chat.started && (
         <>
           <span className="flex-1 px-4 truncate text-center text-bolt-elements-textPrimary">
             <ClientOnly>{() => <ChatDescription />}</ClientOnly>
           </span>
           <ClientOnly>
             {() => (
-              <div className="">
+              <div className="flex items-center gap-4">
+                <nav className="flex gap-6">
+                  <Link to="/" className="hover:text-blue-600">Início</Link>
+                  <Link to="/mvp-builder" className="hover:text-blue-600">Construtor MVP</Link>
+                  <Link to="/business-plan" className="hover:text-blue-600">Plano de Negócios</Link>
+                  <Link to="/cofounder-matching" className="hover:text-blue-600">Cofundadores</Link>
+                </nav>
                 <HeaderActionButtons chatStarted={chat.started} />
               </div>
             )}

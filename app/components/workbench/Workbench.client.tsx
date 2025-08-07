@@ -27,6 +27,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { usePreviewStore } from '~/lib/stores/previews';
 import { chatStore } from '~/lib/stores/chat';
 import type { ElementInfo } from './Inspector';
+import { Link } from '@remix-run/react';
 
 interface WorkspaceProps {
   chatStarted?: boolean;
@@ -43,15 +44,15 @@ const viewTransition = { ease: cubicEasingFn };
 const sliderOptions: SliderOptions<WorkbenchViewType> = {
   left: {
     value: 'code',
-    text: 'Code',
+    text: 'Código',
   },
   middle: {
     value: 'diff',
-    text: 'Diff',
+    text: 'Diferenças',
   },
   right: {
     value: 'preview',
-    text: 'Preview',
+    text: 'Visualização',
   },
 };
 
@@ -94,7 +95,7 @@ const FileModifiedDropdown = memo(
           {({ open }: { open: boolean }) => (
             <>
               <Popover.Button className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-bolt-elements-background-depth-2 hover:bg-bolt-elements-background-depth-3 transition-colors text-bolt-elements-item-contentDefault">
-                <span>File Changes</span>
+                <span>Alterações de Arquivos</span>
                 {hasChanges && (
                   <span className="w-5 h-5 rounded-full bg-accent-500/20 text-accent-500 text-xs flex items-center justify-center border border-accent-500/30">
                     {modifiedFiles.length}
@@ -115,7 +116,7 @@ const FileModifiedDropdown = memo(
                     <div className="relative mx-2 mb-2">
                       <input
                         type="text"
-                        placeholder="Search files..."
+                        placeholder="Pesquisar arquivos..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor focus:outline-none focus:ring-2 focus:ring-blue-500/50"
@@ -264,7 +265,7 @@ const FileModifiedDropdown = memo(
                         }}
                         className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-bolt-elements-background-depth-1 hover:bg-bolt-elements-background-depth-3 transition-colors text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary"
                       >
-                        Copy File List
+                        Copiar Lista de Arquivos
                       </button>
                     </div>
                   )}
@@ -407,6 +408,18 @@ export const Workbench = memo(
                         <div className="i-ph:terminal" />
                         Toggle Terminal
                       </PanelHeaderButton>
+                      
+                      {/* Botão Finalizar MVP */}
+                      {chatStarted && Object.keys(files).length > 0 && (
+                        <Link
+                          to="/dashboard-final"
+                          className="mr-1 text-sm flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 transition-all duration-300 transform hover:scale-105"
+                        >
+                          <div className="text-sm">✅</div>
+                          <span>Finalizar MVP</span>
+                        </Link>
+                      )}
+                      
                       <DropdownMenu.Root>
                         <DropdownMenu.Trigger className="text-sm flex items-center gap-1 text-bolt-elements-item-contentDefault bg-transparent enabled:hover:text-bolt-elements-item-contentActive rounded-md p-1 enabled:hover:bg-bolt-elements-item-backgroundActive disabled:cursor-not-allowed">
                           <div className="i-ph:box-arrow-up" />
